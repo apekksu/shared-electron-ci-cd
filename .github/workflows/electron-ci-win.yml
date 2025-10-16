@@ -86,8 +86,9 @@ jobs:
           organization-id: ${{ env.SIGNPATH_ORG }}
           project-slug: ${{ env.SIGNPATH_PROJECT }}
           input-artifact: dist/*.exe
-          output-artifact: dist/signed/ 
+          output-artifact: dist/signed/
           signing-policy-slug: release-signing
+
 
       - name: Upload to S3 (versioned path)
         shell: bash

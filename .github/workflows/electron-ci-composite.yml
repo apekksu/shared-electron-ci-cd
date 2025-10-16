@@ -29,6 +29,7 @@ jobs:
       node_version:     ${{ inputs.node_version }}
 
   win:
+    if: ${{ inputs.enable_windows }}
     uses: ./.github/workflows/electron-ci-win.yml
     with:
       app_ref:          ${{ inputs.app_ref }}
