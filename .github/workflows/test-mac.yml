@@ -1,0 +1,20 @@
+name: Test Mac from shared repo
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:   { description: "App repo ref", default: "main" }
+      channel:   { type: choice, options: [dev, stage, prod], default: dev }
+
+jobs:
+  run:
+    uses: ./.github/workflows/electron-ci-mac.yml
+    with:
+      app_ref:          ${{ inputs.app_ref }}
+      app_repo:         apekksu/cyber-folk-electron
+      release_channel:  ${{ inputs.channel }}
+      s3_bucket:        cyberfolk-electron-releases-dev
+      aws_region:       eu-central-1
+      publish_base_url: https://cyberfolk-electron-releases-dev.s3.eu-central-1.amazonaws.com
+      secrets_name:     apple-notary-api-dev
+      product_path:     releases
+      node_version:     22.11.0
