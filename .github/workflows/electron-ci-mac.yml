@@ -98,13 +98,23 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Validate notary credentials
+        run: |
+          set -e
+          /usr/bin/xcrun notarytool history \
+            --issuer "$APPLE_API_ISSUER" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --key "$APPLE_API_KEY" \
+            --output-format json >/dev/null
+          echo "notarytool credentials look OK."
+
       - name: Build mac (arm64 + x64), sign, notarize (no publish)
         env:
-          APPLE_API_KEY:    ${{ env.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ env.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ env.APPLE_API_ISSUER }}
+          APPLE_API_ISSUER: ${{ env.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY:    ${{ env.APPLE_API_KEY_PATH }}
         run: |
-          npx electron-builder --mac zip --arm64 --x64 --publish never
+          npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
 
       - name: Upload to S3 (versioned path)
         run: |
