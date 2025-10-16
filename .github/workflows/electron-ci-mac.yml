@@ -104,15 +104,30 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
-      - name: Validate notary credentials
+      - name: Inspect p8
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "BEGIN/END markers:"
+          head -1 "$APPLE_API_KEY_PATH" || true
+          tail -1 "$APPLE_API_KEY_PATH" || true
+          echo "Size (bytes): $(wc -c < "$APPLE_API_KEY_PATH" || echo 0)"
+          echo "OpenSSL parse:"
+          if openssl pkey -in "$APPLE_API_KEY_PATH" -noout -text >/dev/null 2>&1; then
+            echo "OpenSSL OK"
+          else
+            echo "OpenSSL FAIL (file is not a valid PEM private key)"
+            exit 1
+          fi
+
+      - name: Validate notary credentials (show full error)
         run: |
           set -e
           /usr/bin/xcrun notarytool history \
-            --issuer "$APPLE_API_ISSUER_ID" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --key "$APPLE_API_KEY_PATH" \
-            --output-format json >/dev/null
-          echo "notarytool credentials look OK."
+            --issuer  "$APPLE_API_ISSUER_ID" \
+            --key-id  "$APPLE_API_KEY_ID" \
+            --key     "$APPLE_API_KEY_PATH" \
+            --output-format json
 
       - name: Build mac (arm64 + x64), sign, notarize (no publish)
         env:
