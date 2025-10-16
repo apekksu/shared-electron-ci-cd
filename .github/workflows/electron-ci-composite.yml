@@ -13,6 +13,7 @@ on:
       secrets_win:      { type: string, required: true }
       product_path:     { type: string, required: false, default: "releases" }
       node_version:     { type: string, required: false, default: "22.11.0" }
+      enable_windows:   { type: boolean, required: false, default: false }
 
 jobs:
   mac:
@@ -43,19 +44,16 @@ jobs:
       node_version:     ${{ inputs.node_version }}
 
   finalize:
-    needs: [mac, win]
+    needs: [mac]
     environment: ${{ inputs.release_channel }}
     runs-on: ubuntu-latest
     permissions: { id-token: write, contents: read }
     steps:
-      - name: Configure AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
-      - name: Check ARN visible (last 12 chars)
-        run: echo "${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}" | tail -c 12
-
+      - run: echo "${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}" | tail -c 12
       - name: Promote moving feed (optional)
         env:
           BUCKET:       ${{ inputs.s3_bucket }}
@@ -65,6 +63,5 @@ jobs:
           set -euo pipefail
           aws s3 cp "s3://${BUCKET}/${PRODUCT_PATH}/${GITHUB_REF_NAME#v}/mac/latest-mac.yml" "s3://${BUCKET}/${PRODUCT_PATH}/latest/latest-mac.yml" --only-show-errors || true
           aws s3 cp "s3://${BUCKET}/${PRODUCT_PATH}/${GITHUB_REF_NAME#v}/win/latest.yml"      "s3://${BUCKET}/${PRODUCT_PATH}/latest/latest.yml"      --only-show-errors || true
-
           printf '{"channel":"%s","latest":"%s"}\n' "$CHANNEL" "${GITHUB_REF_NAME#v}" > channel.json
           aws s3 cp channel.json "s3://${BUCKET}/${PRODUCT_PATH}/channel.json" --only-show-errors
