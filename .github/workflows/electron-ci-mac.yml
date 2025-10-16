@@ -132,27 +132,42 @@ jobs:
             --key     "$APPLE_API_KEY_PATH" \
             --output-format json
 
-      - name: Derive Apple Team ID from certificate
+      - name: Determine Apple Team ID (vars → P12 → fail)
         shell: bash
         run: |
           set -euo pipefail
-          security list-keychains -d user -s build.keychain || true
-          security default-keychain -s build.keychain || true
-          security unlock-keychain -p "" build.keychain || true
-          echo "== Identities in build.keychain =="
-          security find-identity -v -p codesigning build.keychain || true
-          TEAM=$(
-            security find-identity -v -p codesigning build.keychain |
-            awk -F'[()]' '/Developer ID Application|Apple Distribution|Apple Development/ { print $(NF-1); exit }'
-          )
-          if [ -z "${TEAM:-}" ] && [ -f "${P12_PATH:-}" ]; then
-            TEAM=$(openssl pkcs12 -in "$P12_PATH" -passin pass:"${P12_PASS:-}" -nokeys |
-                  openssl x509 -noout -subject |
-                  sed -n 's/.*OU=\([A-Z0-9]\{10\}\).*/\1/p')
+
+          if [ -n "${{ vars.APPLE_TEAM_ID }}" ]; then
+            echo "Using APPLE_TEAM_ID from vars."
+            echo "APPLE_TEAM_ID=${{ vars.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+            exit 0
           fi
-          [ -n "${TEAM:-}" ] || { echo "Could not extract team id"; exit 1; }
-          echo "APPLE_TEAM_ID=$TEAM" >> $GITHUB_ENV
-          echo "Derived APPLE_TEAM_ID=$TEAM"
+
+          if [ -f "${P12_PATH:-}" ]; then
+            security list-keychains -d user -s build.keychain || true
+            security default-keychain -s build.keychain || true
+            security unlock-keychain -p "" build.keychain || true
+
+            TEAM=$(
+              security find-identity -v -p codesigning build.keychain |
+              awk -F'[()]' '/Developer ID Application|Apple Distribution|Apple Development/ { print $(NF-1); exit }'
+            )
+
+            if [ -z "${TEAM:-}" ]; then
+              TEAM=$(openssl pkcs12 -in "$P12_PATH" -passin pass:"${P12_PASS:-}" -nokeys |
+                     openssl x509 -noout -subject |
+                     sed -n 's/.*OU=\([A-Z0-9]\{10\}\).*/\1/p')
+            fi
+
+            if [ -n "${TEAM:-}" ]; then
+              echo "APPLE_TEAM_ID=$TEAM" >> $GITHUB_ENV
+              echo "Derived APPLE_TEAM_ID=$TEAM"
+              exit 0
+            fi
+          fi
+
+          echo "No APPLE_TEAM_ID var and no usable P12 to derive it from. Set repo/org variable APPLE_TEAM_ID (10-char Team ID) or provide APPLE_DEV_ID_APP_CERT_P12 in the secret."
+          exit 1
 
       - name: Show APPLE vars
         run: |
