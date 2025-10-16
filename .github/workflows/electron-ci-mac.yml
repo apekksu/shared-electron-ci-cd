@@ -176,6 +176,24 @@ jobs:
           echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
           echo "P12 present? $( [ -f "${P12_PATH:-}" ] && echo yes || echo no )"
 
+      - name: Probe possible notarize env (non-secret)
+        shell: bash
+        run: |
+          for v in APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE; do
+            if [ -n "${!v:-}" ]; then echo "$v is set"; else echo "$v not set"; fi
+          done
+
+      - name: Force API-key notarization (unset other methods)
+        shell: bash
+        run: |
+          {
+            echo "APPLE_ID=";
+            echo "APPLE_PASSWORD=";
+            echo "APPLE_APP_SPECIFIC_PASSWORD=";
+            echo "ASC_KEYCHAIN_PROFILE=";
+            echo "NOTARYTOOL_KEYCHAIN_PROFILE=";
+          } >> "$GITHUB_ENV"
+
       - name: Build mac (arm64 + x64), sign, notarize (no publish)
         env:
           APPLE_API_KEY_ID: ${{ env.APPLE_API_KEY_ID }}
