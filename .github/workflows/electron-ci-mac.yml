@@ -129,6 +129,13 @@ jobs:
             --key     "$APPLE_API_KEY_PATH" \
             --output-format json
 
+      - name: Derive Apple Team ID from certificate
+        run: |
+          set -euo pipefail
+          TEAM=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p' | head -n 1)
+          [ -n "$TEAM" ] || { echo "Could not extract team id"; exit 1; }
+          echo "APPLE_TEAM_ID=$TEAM" >> $GITHUB_ENV
+
       - name: Build mac (arm64 + x64), sign, notarize (no publish)
         env:
           APPLE_API_KEY_ID: ${{ env.APPLE_API_KEY_ID }}
