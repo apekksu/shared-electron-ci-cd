@@ -183,23 +183,13 @@ jobs:
             if [ -n "${!v:-}" ]; then echo "$v is set"; else echo "$v not set"; fi
           done
 
-      - name: Force API-key notarization (unset other methods)
-        shell: bash
-        run: |
-          {
-            echo "APPLE_ID=";
-            echo "APPLE_PASSWORD=";
-            echo "APPLE_APP_SPECIFIC_PASSWORD=";
-            echo "ASC_KEYCHAIN_PROFILE=";
-            echo "NOTARYTOOL_KEYCHAIN_PROFILE=";
-          } >> "$GITHUB_ENV"
-
       - name: Build mac (arm64 + x64), sign, notarize (no publish)
         env:
           APPLE_API_KEY_ID: ${{ env.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ env.APPLE_API_ISSUER_ID }}
           APPLE_API_KEY:    ${{ env.APPLE_API_KEY_PATH }}
         run: |
+          unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
           npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
 
       - name: Upload to S3 (versioned path)
