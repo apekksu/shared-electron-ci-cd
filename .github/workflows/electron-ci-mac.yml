@@ -87,9 +87,9 @@ jobs:
         run: |
           set -e
           /usr/bin/xcrun notarytool history \
-            --issuer "$APPLE_API_ISSUER" \
+            --issuer "$APPLE_API_ISSUER_ID" \
             --key-id "$APPLE_API_KEY_ID" \
-            --key "$APPLE_API_KEY" \
+            --key "$APPLE_API_KEY_PATH" \
             --output-format json >/dev/null
           echo "notarytool credentials look OK."
 
