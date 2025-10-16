@@ -1,0 +1,98 @@
+name: Shared Electron CI (mac)
+
+on:
+  workflow_call:
+    inputs:
+      app_ref:          { type: string, required: false }
+      app_repo:         { type: string, required: true }
+      release_channel:  { type: string, required: true }
+      s3_bucket:        { type: string, required: true }
+      aws_region:       { type: string, required: false, default: "eu-central-1" }
+      publish_base_url: { type: string, required: true }
+      secrets_name:     { type: string, required: true }
+      product_path:     { type: string, required: false, default: "releases" }
+      node_version:     { type: string, required: false, default: "22.11.0" }
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-mac:
+    environment: ${{ inputs.release_channel }}
+    runs-on: macos-latest
+    env:
+      RELEASE_CHANNEL: ${{ inputs.release_channel }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.app_repo }}
+          ref: ${{ inputs.app_ref || github.ref_name }}
+
+      - name: Check ARN visible (last 12 chars)
+        run: echo "${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}" | tail -c 12
+
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Fetch Apple credentials (Secrets Manager)
+        id: apple_env
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(aws secretsmanager get-secret-value --secret-id "${{ inputs.secrets_name }}" --query SecretString --output text)
+          jq -r '.' <<<"$OUT" > secrets.json
+
+          APPLE_API_KEY_ID=$(jq -r '.APPLE_API_KEY_ID' secrets.json)
+          APPLE_API_ISSUER_ID=$(jq -r '.APPLE_API_ISSUER_ID' secrets.json)
+
+
+          P8_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          jq -r '.APPLE_API_KEY_P8' secrets.json | base64 -d > "$P8_PATH"
+
+          P12_PATH="$RUNNER_TEMP/dev_id_app.p12"
+          P12_B64=$(jq -r '.APPLE_DEV_ID_APP_CERT_P12 // empty' secrets.json)
+          if [ -n "$P12_B64" ] && [ "$P12_B64" != "null" ]; then
+            printf "%s" "$P12_B64" | base64 -d > "$P12_PATH"
+            PASS=$(jq -r '.APPLE_DEV_ID_APP_CERT_PASSWORD // .APPLE_CERT_P12_PASSWORD // ""' secrets.json)
+            # Optional: import to a temporary keychain
+            security create-keychain -p "" build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "" build.keychain
+            security import "$P12_PATH" -k build.keychain -P "$PASS" -T /usr/bin/codesign -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+            echo "CSC_LINK=file://$P12_PATH"         >> $GITHUB_ENV
+            echo "CSC_KEY_PASSWORD=$PASS"            >> $GITHUB_ENV
+          fi
+
+          echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"            >> $GITHUB_ENV
+          echo "APPLE_API_ISSUER_ID=$APPLE_API_ISSUER_ID"      >> $GITHUB_ENV
+          echo "APPLE_API_KEY_PATH=$P8_PATH"                   >> $GITHUB_ENV
+
+          echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}"          >> $GITHUB_ENV
+          echo "PUBLISH_BASE_URL=${{ inputs.publish_base_url }}" >> $GITHUB_ENV
+          echo "PRODUCT_PATH=${{ inputs.product_path }}"         >> $GITHUB_ENV
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build mac (arm64 + x64), sign, notarize (no publish)
+        env:
+          APPLE_API_KEY_ID:     ${{ env.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID:  ${{ env.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_PATH:   ${{ env.APPLE_API_KEY_PATH }}
+        run: |
+          npx electron-builder --mac zip --arm64 --x64 --publish never
+
+      - name: Upload to S3 (versioned path)
+        run: |
+          aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
+            --recursive --exclude "*" --include "*.zip" --include "latest-mac.yml" --only-show-errors

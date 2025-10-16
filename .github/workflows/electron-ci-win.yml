@@ -1,0 +1,96 @@
+name: Shared Electron CI (win)
+
+on:
+  workflow_call:
+    inputs:
+      app_ref:          { type: string, required: false }
+      app_repo:         { type: string, required: true }
+      release_channel:  { type: string, required: true }
+      s3_bucket:        { type: string, required: true }
+      aws_region:       { type: string, required: false, default: "eu-central-1" }
+      publish_base_url: { type: string, required: true }
+      secrets_name:     { type: string, required: true }
+      product_path:     { type: string, required: false, default: "releases" }
+      node_version:     { type: string, required: false, default: "22.11.0" }
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-win:
+    environment: ${{ inputs.release_channel }}
+    runs-on: windows-latest
+    env:
+      RELEASE_CHANNEL: ${{ inputs.release_channel }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.app_repo }}
+          ref: ${{ inputs.app_ref || github.ref_name }}
+      - name: Check ARN visible (last 12 chars)
+        run: echo "${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}" | tail -c 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Ensure jq & AWS CLI
+        run: |
+          choco install jq awscli -y
+        shell: powershell
+
+      - name: Fetch SignPath creds (non-fatal if secret missing)
+        id: signpath_env
+        shell: bash
+        run: |
+          set -euo pipefail
+          if aws secretsmanager describe-secret --secret-id "${{ inputs.secrets_name }}" >/dev/null 2>&1; then
+            OUT=$(aws secretsmanager get-secret-value --secret-id "${{ inputs.secrets_name }}" --query SecretString --output text)
+            jq -r '.' <<<"$OUT" > secrets.json
+            echo "SIGNPATH_ORG=$(jq -r '.SIGNPATH_ORG // empty' secrets.json)"         >> $GITHUB_ENV
+            echo "SIGNPATH_PROJECT=$(jq -r '.SIGNPATH_PROJECT // empty' secrets.json)" >> $GITHUB_ENV
+            echo "SIGNPATH_API_TOKEN=$(jq -r '.SIGNPATH_API_TOKEN // empty' secrets.json)" >> $GITHUB_ENV
+          else
+            echo "SIGNPATH_API_TOKEN=" >> $GITHUB_ENV
+          fi
+          echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}"          >> $GITHUB_ENV
+          echo "PUBLISH_BASE_URL=${{ inputs.publish_base_url }}" >> $GITHUB_ENV
+          echo "PRODUCT_PATH=${{ inputs.product_path }}"         >> $GITHUB_ENV
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build Windows (unsigned), no publish
+        run: npx electron-builder -w --x64 --publish never
+
+      - name: Prepare signed folder (no-op if we don't sign)
+        shell: bash
+        run: |
+          mkdir -p dist/signed
+          cp dist/*.exe dist/signed/ 2>/dev/null || true
+          [ -f dist/latest.yml ] && cp dist/latest.yml dist/signed/latest.yml || true
+
+      - name: Sign with SignPath (only if token present)
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: SignPath/github-actions@v1
+        with:
+          command: sign
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORG }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          input-artifact: dist/*.exe
+          output-artifact: dist/signed/ 
+          signing-policy-slug: release-signing
+
+      - name: Upload to S3 (versioned path)
+        shell: bash
+        run: |
+          aws s3 cp dist/signed/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/win/" \
+            --recursive --exclude "*" --include "*.exe" --include "latest.yml" --only-show-errors
