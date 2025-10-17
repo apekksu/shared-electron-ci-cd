@@ -128,15 +128,13 @@ jobs:
 
       - name: Make DMG with Forge (arm64 + x64)
         env:
+          MAC_NOTARIZE:         "0"
+          MAC_NOTARIZE_DMG:     "1"
           APPLE_API_KEY_PATH:   ${{ env.APPLE_API_KEY_PATH }}
           APPLE_API_KEY_ID:     ${{ env.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID:  ${{ env.APPLE_API_ISSUER_ID }}
           APPLE_TEAM_ID:        ${{ env.APPLE_TEAM_ID }}
-          MAC_SIGN:             "1"
-          MAC_NOTARIZE:         "1"
-          MAC_NOTARIZE_DMG:     "1"
         run: |
-          # Force API-key auth only for notarytool (avoid any password/keychain creds)
           unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD NOTARYTOOL_KEYCHAIN_PROFILE ASC_KEYCHAIN_PROFILE
           npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg --verbose
           npx electron-forge make --platform=darwin --arch=x64   --targets=@electron-forge/maker-dmg --verbose
