@@ -137,29 +137,31 @@ jobs:
           MAC_NOTARIZE:         "1"
           MAC_NOTARIZE_DMG:     "1"
         run: |
-          npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
-          npx electron-forge make --platform=darwin --arch=x64   --targets=@electron-forge/maker-dmg
+          npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg --verbose
+          npx electron-forge make --platform=darwin --arch=x64   --targets=@electron-forge/maker-dmg --verbose
 
       - name: Upload DMG (versioned)
         run: |
           aws s3 cp out/make/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
-            --recursive --exclude "*" --include "*.dmg" --only-show-errors
+            --recursive --exclude "*" --include "*.dmg" --acl public-read --only-show-errors
 
       - name: Upload DMG (latest)
         run: |
           LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
-          aws s3 sync out/make/ "$LATEST" --delete --exclude "*" --include "*.dmg" --only-show-errors
+          aws s3 sync out/make/ "$LATEST" --delete --exclude "*" --include "*.dmg" --acl public-read --only-show-errors
 
       - name: Upload versioned (mac)
         run: |
           aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
             --recursive --exclude "*" --include "*.zip" --include "*.blockmap" \
-            --cache-control "public, max-age=31536000, immutable" --only-show-errors
+            --cache-control "public, max-age=31536000, immutable" --acl public-read --only-show-errors
 
       - name: Upload latest (mac)
         run: |
           LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
           aws s3 sync dist/ "$LATEST" --delete \
-            --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" --only-show-errors
+            --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" \
+            --acl public-read --only-show-errors
           aws s3 cp "${LATEST}latest-mac.yml" "${LATEST}latest-mac.yml" \
-            --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" --only-show-errors
+            --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" \
+            --acl public-read --only-show-errors
