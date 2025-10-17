@@ -70,6 +70,7 @@ jobs:
             P12_PATH="$RUNNER_TEMP/dev_id_app.p12"
             printf "%s" "$P12_B64" | base64 -d > "$P12_PATH"
             PASS=$(jq -r '.APPLE_DEV_ID_APP_CERT_PASSWORD // .APPLE_CERT_P12_PASSWORD // ""' secrets.json)
+            echo "::add-mask::$PASS"
             security create-keychain -p "" build.keychain
             security default-keychain -s build.keychain
             security unlock-keychain -p "" build.keychain
@@ -124,6 +125,30 @@ jobs:
         run: |
           unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
           npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
+
+      - name: Make DMG with Forge (arm64 + x64)
+        env:
+
+          APPLE_API_KEY_PATH:   ${{ env.APPLE_API_KEY_PATH }}
+          APPLE_API_KEY_ID:     ${{ env.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID:  ${{ env.APPLE_API_ISSUER_ID }}
+          APPLE_TEAM_ID:        ${{ env.APPLE_TEAM_ID }}
+          MAC_SIGN:             "1"
+          MAC_NOTARIZE:         "1"
+          MAC_NOTARIZE_DMG:     "1"
+        run: |
+          npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
+          npx electron-forge make --platform=darwin --arch=x64   --targets=@electron-forge/maker-dmg
+
+      - name: Upload DMG (versioned)
+        run: |
+          aws s3 cp out/make/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
+            --recursive --exclude "*" --include "*.dmg" --only-show-errors
+
+      - name: Upload DMG (latest)
+        run: |
+          LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
+          aws s3 sync out/make/ "$LATEST" --delete --exclude "*" --include "*.dmg" --only-show-errors
 
       - name: Upload versioned (mac)
         run: |
