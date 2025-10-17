@@ -120,17 +120,17 @@ jobs:
           unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
           npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
 
-      - name: Upload to S3
+      - name: Upload versioned (mac)
         run: |
-          aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_CHANNEL }}/${{ env.RELEASE_VERSION }}/mac/" \
-            --recursive --exclude "*" --include "*.zip" --include "latest-mac.yml" --only-show-errors
+          aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
+            --recursive --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" --only-show-errors
 
-      - name: Upload latest
+      - name: Upload latest (mac)
         run: |
-          LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_CHANNEL }}/latest/mac/"
+          LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
           aws s3 sync dist/ "$LATEST" --delete \
-            --exclude "*" --include "*.zip" --include "latest-mac.yml" --only-show-errors
+            --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" --only-show-errors
           aws s3 cp "${LATEST}latest-mac.yml" "${LATEST}latest-mac.yml" \
-            --metadata-directive REPLACE --cache-control "no-cache" --only-show-errors
+            --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" --only-show-errors
 
 
