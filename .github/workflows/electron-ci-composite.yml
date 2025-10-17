@@ -53,15 +53,13 @@ jobs:
         with:
           role-to-assume: ${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
-      - run: echo "${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}" | tail -c 12
-      - name: Promote moving feed (optional)
+      - name: Write channel pointer
         env:
           BUCKET:       ${{ inputs.s3_bucket }}
           PRODUCT_PATH: ${{ inputs.product_path }}
           CHANNEL:      ${{ inputs.release_channel }}
         run: |
           set -euo pipefail
-          aws s3 cp "s3://${BUCKET}/${PRODUCT_PATH}/${GITHUB_REF_NAME#v}/mac/latest-mac.yml" "s3://${BUCKET}/${PRODUCT_PATH}/latest/latest-mac.yml" --only-show-errors || true
-          aws s3 cp "s3://${BUCKET}/${PRODUCT_PATH}/${GITHUB_REF_NAME#v}/win/latest.yml"      "s3://${BUCKET}/${PRODUCT_PATH}/latest/latest.yml"      --only-show-errors || true
-          printf '{"channel":"%s","latest":"%s"}\n' "$CHANNEL" "${GITHUB_REF_NAME#v}" > channel.json
-          aws s3 cp channel.json "s3://${BUCKET}/${PRODUCT_PATH}/channel.json" --only-show-errors
+          printf '{"channel":"%s"}\n' "$CHANNEL" > channel.json
+          aws s3 cp channel.json "s3://${BUCKET}/${PRODUCT_PATH}/${CHANNEL}/channel.json" --only-show-errors
+
