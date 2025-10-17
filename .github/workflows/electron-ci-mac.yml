@@ -93,6 +93,11 @@ jobs:
           echo "PUBLISH_BASE_URL=${{ inputs.publish_base_url }}" >> $GITHUB_ENV
           echo "PRODUCT_PATH=${{ inputs.product_path }}"  >> $GITHUB_ENV
 
+      - name: Validate entitlements file
+        run: |
+          test -f entitlements.plist || { echo "entitlements.plist missing"; exit 1; }
+          plutil -lint entitlements.plist
+
       - name: Install deps
         run: |
           if [ -f package-lock.json ]; then
