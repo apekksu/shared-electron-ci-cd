@@ -127,7 +127,7 @@ jobs:
           npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
 
       - name: Make DMG with Forge (arm64 + x64)
-        timeout-minutes: 30
+        timeout-minutes: 90
         env:
           MAC_NOTARIZE:         "0"
           MAC_NOTARIZE_DMG:     "1"
