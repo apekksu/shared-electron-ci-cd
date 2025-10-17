@@ -120,7 +120,7 @@ jobs:
           unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
           npx electron-builder -c electron-builder.yml --mac zip --arm64 --x64 --publish never
 
-      - name: Upload 1
+      - name: Upload to S3
         run: |
           aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_CHANNEL }}/${{ env.RELEASE_VERSION }}/mac/" \
             --recursive --exclude "*" --include "*.zip" --include "latest-mac.yml" --only-show-errors
