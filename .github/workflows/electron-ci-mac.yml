@@ -19,7 +19,7 @@ permissions:
 jobs:
   build-mac:
     concurrency:
-      group: ${{ github.workflow }}-${{ inputs.release_channel }}-mac
+      group: ${{ github.repository }}-${{ inputs.release_channel }}-mac
       cancel-in-progress: true
     environment: ${{ inputs.release_channel }}
     runs-on: macos-latest
@@ -123,7 +123,8 @@ jobs:
       - name: Upload versioned (mac)
         run: |
           aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
-            --recursive --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" --only-show-errors
+            --recursive --exclude "*" --include "*.zip" --include "*.blockmap" \
+            --cache-control "public, max-age=31536000, immutable" --only-show-errors
 
       - name: Upload latest (mac)
         run: |
@@ -132,5 +133,3 @@ jobs:
             --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" --only-show-errors
           aws s3 cp "${LATEST}latest-mac.yml" "${LATEST}latest-mac.yml" \
             --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" --only-show-errors
-
-
