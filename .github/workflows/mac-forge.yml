@@ -89,6 +89,12 @@ jobs:
           [ -z "$PKG_VERSION" -o "$PKG_VERSION" = "undefined" ] && PKG_VERSION="${GITHUB_REF_NAME#v}"
           echo "RELEASE_VERSION=$PKG_VERSION" >> $GITHUB_ENV
 
+      - name: Sanitize notarization env
+        shell: bash
+        run: |
+            env | egrep '(^APPLE_ID=)|(^APPLE_PASSWORD=)|(^APPLE_APP_SPECIFIC_PASSWORD=)|(^ASC_KEYCHAIN_PROFILE=)|(^NOTARYTOOL_KEYCHAIN_PROFILE=)' || true
+            unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
+
       - name: Install deps
         run: |
             if [ -f package-lock.json ]; then
