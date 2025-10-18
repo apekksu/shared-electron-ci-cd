@@ -1,11 +1,18 @@
-name: Release Electron (mac / Forge)
+name: Shared Electron CI (mac / Forge)
 
 on:
-  workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
-
+  workflow_call:
+    inputs:
+      app_ref:          { type: string, required: false }
+      app_repo:         { type: string, required: true }
+      release_channel:  { type: string, required: true }
+      s3_bucket:        { type: string, required: true }
+      aws_region:       { type: string, required: false, default: "eu-central-1" }
+      publish_base_url: { type: string, required: true }
+      secrets_name:     { type: string, required: true }
+      product_path:     { type: string, required: false, default: "releases" }
+      node_version:     { type: string, required: false, default: "22.11.0" }
+      with_updater:     { type: boolean, required: false, default: false } 
 permissions:
   id-token: write
   contents: read
@@ -15,43 +22,41 @@ jobs:
     timeout-minutes: 120
     runs-on: macos-latest
     env:
-      RELEASE_CHANNEL: dev
+      RELEASE_CHANNEL: ${{ inputs.release_channel }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.app_repo }}
+          ref: ${{ inputs.app_ref || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.11.0
+          node-version: ${{ inputs.node_version }}
 
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.ELECTRON_PUBLISH_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+          aws-region: ${{ inputs.aws_region }}
 
       - name: Fetch Apple credentials (Secrets Manager)
         id: apple_env
         shell: bash
         run: |
           set -euo pipefail
-          OUT=$(aws secretsmanager get-secret-value --secret-id "${{ vars.APPLE_SECRET_NAME }}" --query SecretString --output text)
+          OUT=$(aws secretsmanager get-secret-value --secret-id "${{ inputs.secrets_name }}" --query SecretString --output text)
           jq -r '.' <<<"$OUT" > secrets.json
 
           APPLE_API_KEY_ID=$(jq -r '.APPLE_API_KEY_ID' secrets.json)
           APPLE_API_ISSUER_ID=$(jq -r '.APPLE_API_ISSUER_ID' secrets.json)
           P8_RAW=$(jq -r '.APPLE_API_KEY_P8 // empty' secrets.json)
-          [ -z "$P8_RAW" -o "$P8_RAW" = "null" ] && { echo "APPLE_API_KEY_P8 is missing"; exit 1; }
+          [ -z "$P8_RAW" -o "$P8_RAW" = "null" ] && { echo "APPLE_API_KEY_P8 is missing in secret"; exit 1; }
 
           P8_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          if echo "$P8_RAW" | base64 -d > "$P8_PATH" 2>/dev/null; then
-            echo "decoded p8"
-          else
-            printf '%b' "$P8_RAW" > "$P8_PATH"
-            echo "wrote p8 literal"
-          fi
+          if echo "$P8_RAW" | base64 -d > "$P8_PATH" 2>/dev/null; then echo "p8: decoded from base64"; else printf '%b' "$P8_RAW" > "$P8_PATH"; echo "p8: wrote from literal"; fi
           chmod 600 "$P8_PATH"
-          head -1 "$P8_PATH" | grep -q "BEGIN " || { echo "p8 looks wrong"; exit 1; }
+          head -1 "$P8_PATH" | grep -q "BEGIN " || { echo "p8 looks wrong (missing BEGIN header)"; exit 1; }
 
           P12_B64=$(jq -r '.APPLE_DEV_ID_APP_CERT_P12 // empty' secrets.json)
           if [ -n "$P12_B64" ] && [ "$P12_B64" != "null" ]; then
@@ -73,31 +78,26 @@ jobs:
           echo "APPLE_API_KEY_PATH=$P8_PATH"              >> $GITHUB_ENV
           echo "APPLE_TEAM_ID=${{ vars.APPLE_TEAM_ID }}"  >> $GITHUB_ENV
 
-          PKG_VERSION=$(node -p "require('./package.json').version")
+          PKG_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || true)
+          [ -z "$PKG_VERSION" -o "$PKG_VERSION" = "undefined" ] && PKG_VERSION="${GITHUB_REF_NAME#v}"
           echo "RELEASE_VERSION=$PKG_VERSION" >> $GITHUB_ENV
-          echo "PUBLISH_BASE_URL=${{ vars.PUBLISH_BASE_URL }}" >> $GITHUB_ENV
-          echo "PRODUCT_PATH=${{ vars.PRODUCT_PATH || 'releases' }}" >> $GITHUB_ENV
 
       - name: Install deps
-        run: |
-          npm ci
-
+        run: npm ci
 
       - name: Forge make (arm64)
         env:
           MAC_NOTARIZE: "1"
           MAC_NOTARIZE_DMG: "1"
           DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
-        run: |
-          npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
+        run: npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
 
       - name: Forge make (x64)
         env:
           MAC_NOTARIZE: "1"
           MAC_NOTARIZE_DMG: "1"
           DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
-        run: |
-          npx electron-forge make --platform=darwin --arch=x64 --targets=@electron-forge/maker-dmg
+        run: npx electron-forge make --platform=darwin --arch=x64 --targets=@electron-forge/maker-dmg
 
       - name: Show Forge output
         run: |
@@ -108,15 +108,37 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-            name: mac-dmgs
-            path: out/make/**/*.dmg
+          name: mac-dmgs
+          path: out/make/**/*.dmg
 
       - name: Upload DMG (versioned)
         run: |
-          aws s3 cp out/make/ "s3://${{ vars.S3_BUCKET }}/${{ vars.PRODUCT_PATH || 'releases' }}/${{ env.RELEASE_VERSION }}/mac/" \
+          aws s3 cp out/make/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
             --recursive --exclude "*" --include "*.dmg" --only-show-errors
 
       - name: Upload DMG (latest)
         run: |
-          LATEST="s3://${{ vars.S3_BUCKET }}/${{ vars.PRODUCT_PATH || 'releases' }}/latest/mac/"
+          LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
           aws s3 sync out/make/ "$LATEST" --delete --exclude "*" --include "*.dmg" --only-show-errors
+
+      - name: Build updater artifacts (zip + latest-mac.yml)
+        if: ${{ inputs.with_updater }}
+        run: npx electron-builder -c electron-builder.yml --mac zip --publish never
+
+      - name: Upload updater (versioned)
+        if: ${{ inputs.with_updater }}
+        run: |
+          aws s3 cp dist/ "s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/${{ env.RELEASE_VERSION }}/mac/" \
+            --recursive --exclude "*" --include "*.zip" --include "*.blockmap" \
+            --cache-control "public, max-age=31536000, immutable" --only-show-errors
+
+      - name: Upload updater (latest)
+        if: ${{ inputs.with_updater }}
+        run: |
+          LATEST="s3://${{ inputs.s3_bucket }}/${{ inputs.product_path }}/latest/mac/"
+          aws s3 sync dist/ "$LATEST" --delete \
+            --exclude "*" --include "*.zip" --include "*.blockmap" --include "latest-mac.yml" \
+            --only-show-errors
+          aws s3 cp "${LATEST}latest-mac.yml" "${LATEST}latest-mac.yml" \
+            --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" \
+            --only-show-errors
