@@ -93,14 +93,14 @@ jobs:
       - name: Sanitize notarization env (persist)
         shell: bash
         run: |
-            echo "Neutralizing AppleID/keychain profile env for notarize"
-            {
-            echo 'APPLE_ID='
-            echo 'APPLE_PASSWORD='
-            echo 'APPLE_APP_SPECIFIC_PASSWORD='
-            echo 'ASC_KEYCHAIN_PROFILE='
-            echo 'NOTARYTOOL_KEYCHAIN_PROFILE='
-            } >> "$GITHUB_ENV"
+          echo "Neutralizing AppleID/keychain profile env for notarize"
+          for v in APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD \
+                   AC_USERNAME AC_PASSWORD ASC_KEYCHAIN_PROFILE AC_KEYCHAIN_PROFILE \
+                   NOTARYTOOL_KEYCHAIN_PROFILE NOTARIZE_KEYCHAIN_PROFILE; do
+            echo "$v=" >> "$GITHUB_ENV"
+          done
+          echo "After sanitize:"
+          env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
       - name: Install deps
         run: |
@@ -120,27 +120,34 @@ jobs:
 
       - name: Forge make (arm64)
         env:
-            MAC_NOTARIZE: "1"
-            MAC_NOTARIZE_DMG: "1"
-            DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign,electron-notarize"
-            APPLE_ID: ""
-            APPLE_PASSWORD: ""
-            APPLE_APP_SPECIFIC_PASSWORD: ""
-            ASC_KEYCHAIN_PROFILE: ""
-            NOTARYTOOL_KEYCHAIN_PROFILE: ""
-
+          MAC_NOTARIZE: "1"
+          MAC_NOTARIZE_DMG: "1"
+          APPLE_ID: ""
+          APPLE_PASSWORD: ""
+          APPLE_APP_SPECIFIC_PASSWORD: ""
+          AC_USERNAME: ""
+          AC_PASSWORD: ""
+          ASC_KEYCHAIN_PROFILE: ""
+          AC_KEYCHAIN_PROFILE: ""
+          NOTARYTOOL_KEYCHAIN_PROFILE: ""
+          NOTARIZE_KEYCHAIN_PROFILE: ""
+          DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
         run: npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
 
       - name: Forge make (x64)
         env:
-            MAC_NOTARIZE: "1"
-            MAC_NOTARIZE_DMG: "1"
-            DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign,electron-notarize"
-            APPLE_ID: ""
-            APPLE_PASSWORD: ""
-            APPLE_APP_SPECIFIC_PASSWORD: ""
-            ASC_KEYCHAIN_PROFILE: ""
-            NOTARYTOOL_KEYCHAIN_PROFILE: ""
+          MAC_NOTARIZE: "1"
+          MAC_NOTARIZE_DMG: "1"
+          APPLE_ID: ""
+          APPLE_PASSWORD: ""
+          APPLE_APP_SPECIFIC_PASSWORD: ""
+          AC_USERNAME: ""
+          AC_PASSWORD: ""
+          ASC_KEYCHAIN_PROFILE: ""
+          AC_KEYCHAIN_PROFILE: ""
+          NOTARYTOOL_KEYCHAIN_PROFILE: ""
+          NOTARIZE_KEYCHAIN_PROFILE: ""
+          DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
         run: npx electron-forge make --platform=darwin --arch=x64 --targets=@electron-forge/maker-dmg
 
       - name: Show Forge output
