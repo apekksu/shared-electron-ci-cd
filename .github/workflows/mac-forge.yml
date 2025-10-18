@@ -92,8 +92,11 @@ jobs:
       - name: Sanitize notarization env
         shell: bash
         run: |
-            env | egrep '(^APPLE_ID=)|(^APPLE_PASSWORD=)|(^APPLE_APP_SPECIFIC_PASSWORD=)|(^ASC_KEYCHAIN_PROFILE=)|(^NOTARYTOOL_KEYCHAIN_PROFILE=)' || true
+            echo "Before:"
+            env | egrep '(^APPLE_ID=|^APPLE_PASSWORD=|^APPLE_APP_SPECIFIC_PASSWORD=|^ASC_KEYCHAIN_PROFILE=|^NOTARYTOOL_KEYCHAIN_PROFILE=)' || true
             unset APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD ASC_KEYCHAIN_PROFILE NOTARYTOOL_KEYCHAIN_PROFILE
+            echo "After:"
+            env | egrep '(^APPLE_ID=|^APPLE_PASSWORD=|^APPLE_APP_SPECIFIC_PASSWORD=|^ASC_KEYCHAIN_PROFILE=|^NOTARYTOOL_KEYCHAIN_PROFILE=)' || true
 
       - name: Install deps
         run: |
@@ -106,16 +109,26 @@ jobs:
 
       - name: Forge make (arm64)
         env:
-          MAC_NOTARIZE: "1"
-          MAC_NOTARIZE_DMG: "1"
-          DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
+            MAC_NOTARIZE: "1"
+            MAC_NOTARIZE_DMG: "1"
+            DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign,electron-notarize"
+            APPLE_ID: ""
+            APPLE_PASSWORD: ""
+            APPLE_APP_SPECIFIC_PASSWORD: ""
+            ASC_KEYCHAIN_PROFILE: ""
+            NOTARYTOOL_KEYCHAIN_PROFILE: ""
         run: npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
 
       - name: Forge make (x64)
         env:
-          MAC_NOTARIZE: "1"
-          MAC_NOTARIZE_DMG: "1"
-          DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
+            MAC_NOTARIZE: "1"
+            MAC_NOTARIZE_DMG: "1"
+            DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign,electron-notarize"
+            APPLE_ID: ""
+            APPLE_PASSWORD: ""
+            APPLE_APP_SPECIFIC_PASSWORD: ""
+            ASC_KEYCHAIN_PROFILE: ""
+            NOTARYTOOL_KEYCHAIN_PROFILE: ""
         run: npx electron-forge make --platform=darwin --arch=x64 --targets=@electron-forge/maker-dmg
 
       - name: Show Forge output
