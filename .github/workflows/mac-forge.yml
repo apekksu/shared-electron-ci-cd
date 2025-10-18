@@ -90,7 +90,13 @@ jobs:
           echo "RELEASE_VERSION=$PKG_VERSION" >> $GITHUB_ENV
 
       - name: Install deps
-        run: npm ci
+        run: |
+            if [ -f package-lock.json ]; then
+            npm ci
+            else
+            echo "No package-lock.json found; using npm install"
+            npm install --no-audit --no-fund
+            fi
 
       - name: Forge make (arm64)
         env:
