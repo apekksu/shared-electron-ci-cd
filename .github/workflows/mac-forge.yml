@@ -95,11 +95,10 @@ jobs:
         run: |
           echo "Neutralizing AppleID/keychain profile env for notarize"
           for v in APPLE_ID APPLE_PASSWORD APPLE_APP_SPECIFIC_PASSWORD \
-                   AC_USERNAME AC_PASSWORD ASC_KEYCHAIN_PROFILE AC_KEYCHAIN_PROFILE \
-                   NOTARYTOOL_KEYCHAIN_PROFILE NOTARIZE_KEYCHAIN_PROFILE; do
+                  AC_USERNAME AC_PASSWORD ASC_KEYCHAIN_PROFILE AC_KEYCHAIN_PROFILE \
+                  NOTARYTOOL_KEYCHAIN_PROFILE NOTARIZE_KEYCHAIN_PROFILE; do
             echo "$v=" >> "$GITHUB_ENV"
           done
-          echo "After sanitize:"
           env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
       - name: Install deps
