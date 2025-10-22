@@ -103,6 +103,16 @@ jobs:
           done
           env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
+      # add additional env vars in .env.defaults in repo root e.g. S3_PUBLIC_BASE=${S3_PUBLIC_BASE}
+      - name: Generate .env from template
+        run: |
+          export CF_ENV='${{ inputs.release_channel }}'
+          export S3_PUBLIC_BASE='${{ inputs.publish_base_url }}'
+          export AUTO_UPDATE_BASE='${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest'
+          # export API_BASE_URL='${{ vars.API_BASE_URL || '' }}'
+          envsubst < .env.defaults > .env
+
+
       - name: Install deps
         run: |
             if [ -f package-lock.json ]; then
