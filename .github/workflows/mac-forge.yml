@@ -171,10 +171,11 @@ jobs:
           NOTARIZE_KEYCHAIN_PROFILE: ""
           DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
         run: npx electron-forge make --platform=darwin --arch=x64
+
       - name: Show Forge output
         run: |
           echo "---- out/make ----"
-          find out/make -maxdepth 3 -type f -print || true
+          find out/make -type f -print || true
 
       - name: Generate latest-mac.yml
         run: node scripts/generate-update-metadata.js
@@ -193,9 +194,9 @@ jobs:
           [ -z "${BASENAME:-}" ] && BASENAME=$(awk -F': ' '/^\s*- url: /{print $2; exit}' latest-mac.yml || true)
 
           if [ -n "${BASENAME:-}" ]; then
-            ZIP=$(ls out/make/**/"$BASENAME" 2>/dev/null | head -n1 || true)
+            ZIP=$(find out/make -type f -name "$BASENAME" -print -quit 2>/dev/null || true)
           else
-            ZIP=$(ls out/make/**/**-mac.zip 2>/dev/null | head -n1 || true)
+            ZIP=$(find out/make -type f -name "*darwin*.zip" -print -quit 2>/dev/null || true)
             BASENAME=$(basename "$ZIP" 2>/dev/null || true)
           fi
 
@@ -216,11 +217,11 @@ jobs:
           echo "Uploading latest-mac.yml to ${S3_LATEST}/"
           aws s3 cp latest-mac.yml "${S3_LATEST}/" \
             --content-type "text/yaml" --acl public-read
+
           aws s3 cp latest-mac.yml "${S3_VER}/" \
             --content-type "text/yaml" --acl public-read
 
           echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
-
 
       - name: Upload DMGs (GitHub artifact)
         if: always()
