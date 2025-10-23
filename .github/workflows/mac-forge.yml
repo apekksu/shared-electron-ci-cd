@@ -180,7 +180,7 @@ jobs:
       - name: Generate latest-mac.yml
         run: node scripts/generate-update-metadata.js
 
-      - name: Upload mac ZIP + latest-mac.yml
+      - name: Upload mac ZIPs + latest-mac.yml (no ACLs)
         shell: bash
         env:
           S3_BUCKET:     ${{ inputs.s3_bucket }}
@@ -189,39 +189,40 @@ jobs:
           set -euo pipefail
 
           VERSION=$(node -p "require('./package.json').version")
-
-          BASENAME=$(awk -F': ' '/^path: /{print $2; exit}' latest-mac.yml || true)
-          [ -z "${BASENAME:-}" ] && BASENAME=$(awk -F': ' '/^\s*- url: /{print $2; exit}' latest-mac.yml || true)
-
-          if [ -n "${BASENAME:-}" ]; then
-            ZIP=$(find out/make -type f -name "$BASENAME" -print -quit 2>/dev/null || true)
-          else
-            ZIP=$(find out/make -type f -name "*darwin*.zip" -print -quit 2>/dev/null || true)
-            BASENAME=$(basename "$ZIP" 2>/dev/null || true)
-          fi
-
-          if [ -z "${ZIP:-}" ]; then
-            echo "No mac ZIP produced — skipping."
-            exit 0
-          fi
-
           S3_VER="s3://${S3_BUCKET}/${PRODUCT_PATH}/${VERSION}/mac"
           S3_LATEST="s3://${S3_BUCKET}/${PRODUCT_PATH}/latest"
 
-          echo "Uploading ZIP to ${S3_VER}/${BASENAME}"
-          aws s3 cp "$ZIP" "${S3_VER}/" --acl public-read
+          mapfile -t NAMES < <(awk -F': ' '/^\s*- url: /{print $2}' latest-mac.yml)
+          PATH_NAME=$(awk -F': ' '/^path: /{print $2; exit}' latest-mac.yml || true)
+          if [ -n "${PATH_NAME:-}" ] && ! printf '%s\n' "${NAMES[@]}" | grep -qx -- "$PATH_NAME"; then
+            NAMES+=("$PATH_NAME")
+          fi
 
-          echo "Copying ZIP to ${S3_LATEST}/${BASENAME}"
-          aws s3 cp "$ZIP" "${S3_LATEST}/" --acl public-read
+          FOUND=0
+          for BASENAME in "${NAMES[@]}"; do
+            [ -n "$BASENAME" ] || continue
+            ZIP=$(ls out/make/**/"$BASENAME" 2>/dev/null | head -n1 || true)
+            if [ -n "$ZIP" ]; then
+              echo "Uploading ZIP: $BASENAME"
+              aws s3 cp "$ZIP" "${S3_VER}/"
+              aws s3 cp "$ZIP" "${S3_LATEST}/"
+              FOUND=1
+            else
+              echo "WARN: could not find $BASENAME under out/make/**/"
+            fi
+          done
 
-          echo "Uploading latest-mac.yml to ${S3_LATEST}/"
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No mac ZIPs found — skipping ZIP upload."
+            exit 0
+          fi
+
           aws s3 cp latest-mac.yml "${S3_LATEST}/" \
-            --content-type "text/yaml" --acl public-read
-
+            --content-type "text/yaml" --cache-control "no-cache"
           aws s3 cp latest-mac.yml "${S3_VER}/" \
-            --content-type "text/yaml" --acl public-read
+            --content-type "text/yaml" --cache-control "no-cache"
 
-          echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
+          echo "Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
 
       - name: Upload DMGs (GitHub artifact)
         if: always()
