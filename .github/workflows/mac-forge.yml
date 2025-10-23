@@ -189,11 +189,8 @@ jobs:
 
           VERSION=$(node -p "require('./package.json').version")
 
-          BASENAME=""
-          if [ -f latest-mac.yml ]; then
-            BASENAME=$(awk -F': ' '/^path: /{print $2; exit}' latest-mac.yml || true)
-            [ -z "$BASENAME" ] && BASENAME=$(awk -F': ' '/^\s*- url: /{print $2; exit}' latest-mac.yml || true)
-          fi
+          BASENAME=$(awk -F': ' '/^path: /{print $2; exit}' latest-mac.yml || true)
+          [ -z "${BASENAME:-}" ] && BASENAME=$(awk -F': ' '/^\s*- url: /{print $2; exit}' latest-mac.yml || true)
 
           if [ -n "${BASENAME:-}" ]; then
             ZIP=$(ls out/make/**/"$BASENAME" 2>/dev/null | head -n1 || true)
@@ -202,7 +199,7 @@ jobs:
             BASENAME=$(basename "$ZIP" 2>/dev/null || true)
           fi
 
-          if [ -z "$ZIP" ]; then
+          if [ -z "${ZIP:-}" ]; then
             echo "No mac ZIP produced — skipping."
             exit 0
           fi
@@ -216,19 +213,14 @@ jobs:
           echo "Copying ZIP to ${S3_LATEST}/${BASENAME}"
           aws s3 cp "$ZIP" "${S3_LATEST}/" --acl public-read
 
-          if [ -f latest-mac.yml ]; then
-            echo "Uploading latest-mac.yml to ${S3_LATEST}/"
-            aws s3 cp latest-mac.yml "${S3_LATEST}/" \
-              --content-type "text/yaml" --acl public-read
-
-            aws s3 cp latest-mac.yml "${S3_VER}/" \
-              --content-type "text/yaml" --acl public-read
-          else
-            echo "latest-mac.yml not found — did the generator run?"
-            exit 1
-          fi
+          echo "Uploading latest-mac.yml to ${S3_LATEST}/"
+          aws s3 cp latest-mac.yml "${S3_LATEST}/" \
+            --content-type "text/yaml" --acl public-read
+          aws s3 cp latest-mac.yml "${S3_VER}/" \
+            --content-type "text/yaml" --acl public-read
 
           echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
+
 
       - name: Upload DMGs (GitHub artifact)
         if: always()
