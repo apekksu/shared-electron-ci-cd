@@ -180,6 +180,18 @@ jobs:
       - name: Generate latest-mac.yml
         run: node scripts/generate-update-metadata.js
 
+      - name: Clean old ZIPs from 'latest'
+        shell: bash
+        env:
+          S3_BUCKET:    ${{ inputs.s3_bucket }}
+          PRODUCT_PATH: ${{ inputs.product_path }}
+        run: |
+          set -euo pipefail
+          LATEST="s3://${S3_BUCKET}/${PRODUCT_PATH}/latest"
+          aws s3 rm "$LATEST/"      --recursive --exclude "*" --include "*.zip" --only-show-errors || true
+          aws s3 rm "$LATEST/mac/"  --recursive --exclude "*" --include "*.zip" --only-show-errors || true
+
+
       - name: Upload mac ZIPs + latest-mac.yml
         shell: bash
         env:
