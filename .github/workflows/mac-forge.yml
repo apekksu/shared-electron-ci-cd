@@ -104,13 +104,14 @@ jobs:
           env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
       # add additional env vars in .env.defaults in repo root e.g. S3_PUBLIC_BASE=${S3_PUBLIC_BASE}
+      # export API_BASE_URL='${{ vars.API_BASE_URL || '' }}' to use github variables
       - name: Generate .env from template
+        shell: bash
         run: |
           export CF_ENV='${{ inputs.release_channel }}'
           export S3_PUBLIC_BASE='${{ inputs.publish_base_url }}'
           export AUTO_UPDATE_BASE='${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest'
-          # export API_BASE_URL='${{ vars.API_BASE_URL || '' }}'
-          envsubst < .env.defaults > .env
+          envsubst < .env.defaults > .env || true
 
 
       - name: Install deps
@@ -129,6 +130,16 @@ jobs:
                     APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_API_ISSUER_ID APPLE_API_KEY_PATH APPLE_API_KEY_PATH
             do printf "%s=%q\n" "$k" "${!k-<unset>}"; done
 
+      - name: Write baked update base
+        shell: bash
+        run: |
+          mkdir -p src
+          cat > src/update-base.js <<'JS'
+          module.exports = {
+            URL: "${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest"
+          };
+          JS
+
       - name: Forge make (arm64)
         env:
           MAC_NOTARIZE: "1"
@@ -143,7 +154,7 @@ jobs:
           NOTARYTOOL_KEYCHAIN_PROFILE: ""
           NOTARIZE_KEYCHAIN_PROFILE: ""
           DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
-        run: npx electron-forge make --platform=darwin --arch=arm64 --targets=@electron-forge/maker-dmg
+        run: npx electron-forge make --platform=darwin --arch=arm64
 
       - name: Forge make (x64)
         env:
@@ -159,12 +170,65 @@ jobs:
           NOTARYTOOL_KEYCHAIN_PROFILE: ""
           NOTARIZE_KEYCHAIN_PROFILE: ""
           DEBUG: "@electron-forge/*,electron-packager,electron-osx-sign"
-        run: npx electron-forge make --platform=darwin --arch=x64 --targets=@electron-forge/maker-dmg
-
+        run: npx electron-forge make --platform=darwin --arch=x64
       - name: Show Forge output
         run: |
           echo "---- out/make ----"
           find out/make -maxdepth 3 -type f -print || true
+
+      - name: Generate latest-mac.yml
+        run: node scripts/generate-update-metadata.js
+
+      - name: Upload mac ZIP + latest-mac.yml
+        shell: bash
+        env:
+          S3_BUCKET:     ${{ inputs.s3_bucket }}
+          PRODUCT_PATH:  ${{ inputs.product_path }}
+        run: |
+          set -euo pipefail
+
+          VERSION=$(node -p "require('./package.json').version")
+
+          BASENAME=""
+          if [ -f latest-mac.yml ]; then
+            BASENAME=$(awk -F': ' '/^path: /{print $2; exit}' latest-mac.yml || true)
+            [ -z "$BASENAME" ] && BASENAME=$(awk -F': ' '/^\s*- url: /{print $2; exit}' latest-mac.yml || true)
+          fi
+
+          if [ -n "${BASENAME:-}" ]; then
+            ZIP=$(ls out/make/**/"$BASENAME" 2>/dev/null | head -n1 || true)
+          else
+            ZIP=$(ls out/make/**/**-mac.zip 2>/dev/null | head -n1 || true)
+            BASENAME=$(basename "$ZIP" 2>/dev/null || true)
+          fi
+
+          if [ -z "$ZIP" ]; then
+            echo "No mac ZIP produced — skipping."
+            exit 0
+          fi
+
+          S3_VER="s3://${S3_BUCKET}/${PRODUCT_PATH}/${VERSION}/mac"
+          S3_LATEST="s3://${S3_BUCKET}/${PRODUCT_PATH}/latest"
+
+          echo "Uploading ZIP to ${S3_VER}/${BASENAME}"
+          aws s3 cp "$ZIP" "${S3_VER}/" --acl public-read
+
+          echo "Copying ZIP to ${S3_LATEST}/${BASENAME}"
+          aws s3 cp "$ZIP" "${S3_LATEST}/" --acl public-read
+
+          if [ -f latest-mac.yml ]; then
+            echo "Uploading latest-mac.yml to ${S3_LATEST}/"
+            aws s3 cp latest-mac.yml "${S3_LATEST}/" \
+              --content-type "text/yaml" --acl public-read
+
+            aws s3 cp latest-mac.yml "${S3_VER}/" \
+              --content-type "text/yaml" --acl public-read
+          else
+            echo "latest-mac.yml not found — did the generator run?"
+            exit 1
+          fi
+
+          echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
 
       - name: Upload DMGs (GitHub artifact)
         if: always()
