@@ -103,16 +103,22 @@ jobs:
           done
           env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
-      # add additional env vars in .env.defaults in repo root e.g. S3_PUBLIC_BASE=${S3_PUBLIC_BASE}
-      # export API_BASE_URL='${{ vars.API_BASE_URL || '' }}' to use github variables
       - name: Generate .env from template
         shell: bash
         run: |
           export CF_ENV='${{ inputs.release_channel }}'
           export S3_PUBLIC_BASE='${{ inputs.publish_base_url }}'
           export AUTO_UPDATE_BASE='${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest'
+          
+          # Set WEB_APP_URL based on release channel
+          case "${{ inputs.release_channel }}" in
+            dev)   export WEB_APP_URL='https://dev.cyberfolk.ai/' ;;
+            stage) export WEB_APP_URL='https://stage.cyberfolk.ai/' ;;
+            prod)  export WEB_APP_URL='https://prod.cyberfolk.ai/' ;;
+          esac
+          
           envsubst < .env.defaults > .env || true
-
+          echo "Generated .env with WEB_APP_URL=$WEB_APP_URL"
 
       - name: Install deps
         run: |
