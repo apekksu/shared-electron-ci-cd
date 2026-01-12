@@ -103,13 +103,9 @@ jobs:
           done
           env | egrep '^(APPLE_|AC_|ASC_|NOTARY)' || true
 
-      - name: Generate .env from template
+      - name: Generate config.js
         shell: bash
         run: |
-          export CF_ENV='${{ inputs.release_channel }}'
-          export S3_PUBLIC_BASE='${{ inputs.publish_base_url }}'
-          export AUTO_UPDATE_BASE='${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest'
-          
           # Set WEB_APP_URL based on release channel
           case "${{ inputs.release_channel }}" in
             dev)   export WEB_APP_URL='https://dev.cyberfolk.ai/' ;;
@@ -117,8 +113,14 @@ jobs:
             prod)  export WEB_APP_URL='https://prod.cyberfolk.ai/' ;;
           esac
           
-          envsubst < .env.defaults > .env || true
-          echo "Generated .env with WEB_APP_URL=$WEB_APP_URL"
+          cat > config.js <<EOF
+          module.exports = {
+            WEB_APP_URL: '${WEB_APP_URL}'
+          };
+          EOF
+          
+          echo "Generated config.js with WEB_APP_URL=$WEB_APP_URL"
+          cat config.js
 
       - name: Install deps
         run: |
@@ -291,3 +293,4 @@ jobs:
           aws s3 cp "${LATEST}latest-mac.yml" "${LATEST}latest-mac.yml" \
             --metadata-directive REPLACE --cache-control "no-cache" --content-type "text/yaml" \
             --only-show-errors
+
