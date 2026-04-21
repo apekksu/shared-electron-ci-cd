@@ -110,7 +110,7 @@ jobs:
           case "${{ inputs.release_channel }}" in
             dev)   export WEB_APP_URL='https://dev.cyberfolk.ai/' ;;
             stage) export WEB_APP_URL='https://stage.cyberfolk.ai/' ;;
-            prod)  export WEB_APP_URL='https://prod.cyberfolk.ai/' ;;
+            prod)  export WEB_APP_URL='https://web.cyberfolk.ai/' ;;
           esac
           
           cat > config.js <<EOF
