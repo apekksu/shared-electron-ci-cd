@@ -115,11 +115,12 @@ jobs:
           
           cat > config.js <<EOF
           module.exports = {
-            WEB_APP_URL: '${WEB_APP_URL}'
+            WEB_APP_URL: '${WEB_APP_URL}',
+            UPDATE_FEED_URL: '${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/'
           };
           EOF
           
-          echo "Generated config.js with WEB_APP_URL=$WEB_APP_URL"
+          echo "Generated config.js:"
           cat config.js
 
       - name: Install deps
@@ -138,15 +139,16 @@ jobs:
                     APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_API_ISSUER_ID APPLE_API_KEY_PATH APPLE_API_KEY_PATH
             do printf "%s=%q\n" "$k" "${!k-<unset>}"; done
 
-      - name: Write baked update base
+      - name: Rewrite app-update.yml for environment
         shell: bash
         run: |
-          mkdir -p src
-          cat > src/update-base.js <<'JS'
-          module.exports = {
-            URL: "${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest"
-          };
-          JS
+          cat > app-update.yml <<EOF
+          provider: generic
+          url: ${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/
+          updaterCacheDirName: cyberfolk-updater
+          EOF
+          echo "Rewrote app-update.yml:"
+          cat app-update.yml
 
       - name: Forge make (arm64)
         env:
