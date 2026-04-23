@@ -116,7 +116,7 @@ jobs:
           cat > config.js <<EOF
           module.exports = {
             WEB_APP_URL: '${WEB_APP_URL}',
-            UPDATE_FEED_URL: '${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/'
+            UPDATE_FEED_URL: '${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/mac/'
           };
           EOF
           
@@ -144,7 +144,7 @@ jobs:
         run: |
           cat > app-update.yml <<EOF
           provider: generic
-          url: ${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/
+          url: ${{ inputs.publish_base_url }}/${{ inputs.product_path }}/latest/mac/
           updaterCacheDirName: cyberfolk-updater
           EOF
           echo "Rewrote app-update.yml:"
@@ -241,7 +241,6 @@ jobs:
 
             echo "Uploading ${NAME}"
             aws s3 cp "$ZIP_PATH" "${S3_VER}/"       --only-show-errors
-            aws s3 cp "$ZIP_PATH" "${S3_LATEST}/"    --only-show-errors
             aws s3 cp "$ZIP_PATH" "${S3_LATEST_MAC}/" --only-show-errors
             FOUND=$((FOUND+1))
           done <<< "$ZIP_LIST"
@@ -251,11 +250,10 @@ jobs:
             exit 0
           fi
 
-          aws s3 cp latest-mac.yml "${S3_LATEST}/"      --content-type "text/yaml" --cache-control "no-cache" --only-show-errors
           aws s3 cp latest-mac.yml "${S3_VER}/"         --content-type "text/yaml" --cache-control "no-cache" --only-show-errors
-          # aws s3 cp latest-mac.yml "${S3_LATEST_MAC}/"  --content-type "text/yaml" --cache-control "no-cache" --only-show-errors
+          aws s3 cp latest-mac.yml "${S3_LATEST_MAC}/"  --content-type "text/yaml" --cache-control "no-cache" --only-show-errors
 
-          echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/latest-mac.yml"
+          echo "Done. Auto-updater will read: ${PRODUCT_PATH}/latest/mac/latest-mac.yml"
 
       - name: Upload DMGs (GitHub artifact)
         if: always()
