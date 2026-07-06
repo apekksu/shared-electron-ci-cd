@@ -14,6 +14,7 @@ on:
       node_version:     { type: string, required: false, default: "22.11.0" }
       with_updater:     { type: boolean, required: false, default: false }
       role_to_assume:   { type: string, required: false }
+      app_dir:          { type: string, required: false, default: "." }
 permissions:
   id-token: write
   contents: read
@@ -25,6 +26,9 @@ jobs:
     environment: ${{ inputs.release_channel }}
     env:
       RELEASE_CHANNEL: ${{ inputs.release_channel }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.app_dir }}
 
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +128,9 @@ jobs:
           cat config.js
 
       - name: Install deps
+        # In a monorepo the lockfile lives at the repo root; installing there
+        # hoists workspace deps. With app_dir "." this is unchanged behavior.
+        working-directory: .
         run: |
             if [ -f package-lock.json ]; then
             npm ci
@@ -260,7 +267,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-dmgs
-          path: out/make/**/*.dmg
+          path: ${{ inputs.app_dir }}/out/make/**/*.dmg
 
       - name: Upload DMG (versioned)
         run: |
